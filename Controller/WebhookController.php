@@ -27,7 +27,7 @@ class WebhookController extends BaseController
 
         $result = $handler->parsePayload(
             $this->request->getHeader('X-Gitea-Event'),
-            $this->request->getJson()
+            $this->request->getJson(),
         );
 
         $this->response->text($result ? 'PARSED' : 'IGNORED');

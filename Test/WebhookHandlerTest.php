@@ -3,44 +3,44 @@
 require_once 'tests/units/Base.php';
 
 use Kanboard\Event\GenericEvent;
-use Kanboard\Plugin\GiteaWebhook\WebhookHandler;
-use Kanboard\Model\TaskCreationModel;
 use Kanboard\Model\ProjectModel;
+use Kanboard\Model\TaskCreationModel;
+use Kanboard\Plugin\GiteaWebhook\WebhookHandler;
 
 class WebhookHandlerTest extends Base
 {
     public function testUnsupportedEvent()
     {
-        $payload = json_decode(file_get_contents(__DIR__.'/fixtures/push.json'), true);
+        $payload = json_decode(file_get_contents(__DIR__ . '/fixtures/push.json'), true);
         $handler = new WebhookHandler($this->container);
         $this->assertFalse($handler->parsePayload('create', $payload));
     }
 
     public function testHandlePush()
     {
-        $this->container['dispatcher']->addListener(WebhookHandler::EVENT_COMMIT_REF, array($this, 'onCommit'));
+        $this->container['dispatcher']->addListener(WebhookHandler::EVENT_COMMIT_REF, [$this, 'onCommit']);
 
         $tc = new TaskCreationModel($this->container);
         $p = new ProjectModel($this->container);
         $handler = new WebhookHandler($this->container);
-        $payload = json_decode(file_get_contents(__DIR__.'/fixtures/push.json'), true);
+        $payload = json_decode(file_get_contents(__DIR__ . '/fixtures/push.json'), true);
 
-        $this->assertEquals(1, $p->create(array('name' => 'test')));
+        $this->assertEquals(1, $p->create(['name' => 'test']));
         $handler->setProjectId(1);
 
         // No task
         $this->assertFalse($handler->parsePayload('push', $payload));
 
         // Create task with the wrong id
-        $this->assertEquals(1, $tc->create(array('title' => 'test1', 'project_id' => 1)));
+        $this->assertEquals(1, $tc->create(['title' => 'test1', 'project_id' => 1]));
         $this->assertFalse($handler->parsePayload('push', $payload));
 
         // Create task with the right id
-        $this->assertEquals(2, $tc->create(array('title' => 'test2', 'project_id' => 1)));
+        $this->assertEquals(2, $tc->create(['title' => 'test2', 'project_id' => 1]));
         $this->assertTrue($handler->parsePayload('push', $payload));
 
         $called = $this->container['dispatcher']->getCalledListeners();
-        $this->assertArrayHasKey(WebhookHandler::EVENT_COMMIT_REF.'.WebhookHandlerTest::onCommit', $called);
+        $this->assertArrayHasKey(WebhookHandler::EVENT_COMMIT_REF . '.WebhookHandlerTest::onCommit', $called);
     }
 
     public function onCommit(GenericEvent $event)

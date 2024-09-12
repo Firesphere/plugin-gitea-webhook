@@ -18,8 +18,10 @@ class WebhookHandler extends Base
      *
      * @var string
      */
-    const EVENT_COMMIT_REF = 'gitea.webhook.commit_ref';
-    const EVENT_COMMIT_CLOSE = 'gitea.webhook.commit_close';
+    public const EVENT_COMMIT_REF = 'gitea.webhook.commit_ref';
+    public const EVENT_COMMIT_CLOSE = 'gitea.webhook.commit_close';
+    public const EVENT_PR_CREATE = 'gitea.webhook.pr_create';
+    public const EVENT_PR_CLOSE = 'gitea.webhook.pr_close';
 
     /**
      * Project id
@@ -33,7 +35,7 @@ class WebhookHandler extends Base
      * Set the project id
      *
      * @access public
-     * @param  integer   $project_id   Project id
+     * @param integer $project_id Project id
      */
     public function setProjectId($project_id)
     {
@@ -44,29 +46,42 @@ class WebhookHandler extends Base
      * Parse incoming events
      *
      * @access public
-     * @param  string  $type      Gitea event type
-     * @param  array   $payload   Gitea event
+     * @param string $type Gitea event type
+     * @param array $payload Gitea event
      * @return boolean
      */
     public function parsePayload($type, array $payload)
     {
-        if ($type === 'push') {
-            return $this->handlePush($payload);
+        $type = explode('_', $type);
+        array_walk($type, function (&$item) {
+            return ucfirst($item);
+        });
+        $methodName = sprintf('handle%s', implode('', $type));
+        if (method_exists($this, $methodName)) {
+            return $this->$methodName($payload);
         }
 
         return false;
+    }
+
+    public function handlePullRequest(array $payload)
+    {
+        // $task_id = $this->taskModel->getTaskIdFromText($commit['message']);
+        $re = '/(refs|closes|implements|fixes) #([0-9]*)/m';
+
+        //        preg_match_all($re, $commit['message'], $matches, PREG_SET_ORDER, 0);
     }
 
     /**
      * Parse push events
      *
      * @access public
-     * @param  array   $payload
+     * @param array $payload
      * @return boolean
      */
     public function handlePush(array $payload)
     {
-        $results = array();
+        $results = [];
 
         if (isset($payload['commits'])) {
             foreach ($payload['commits'] as $commit) {
@@ -81,7 +96,7 @@ class WebhookHandler extends Base
      * Parse commit
      *
      * @access public
-     * @param  array   $commit   Gitea commit
+     * @param array $commit Gitea commit
      * @return boolean
      */
     public function handleCommit(array $commit)
@@ -91,7 +106,7 @@ class WebhookHandler extends Base
 
         preg_match_all($re, $commit['message'], $matches, PREG_SET_ORDER, 0);
 
-        foreach($matches as $taskRef) {
+        foreach ($matches as $taskRef) {
             $task_id = $taskRef[2];
             if (empty($task_id)) {
                 return false;
@@ -108,23 +123,23 @@ class WebhookHandler extends Base
             }
 
             $action = $taskRef['1'];
-            if(!in_array($action, array('refs', 'closes', 'implements', 'fixes'))) {
+            if (!in_array($action, ['refs', 'closes', 'implements', 'fixes'])) {
                 return false;
             }
-            
+
             $event = ($action === 'refs' ? self::EVENT_COMMIT_REF : self::EVENT_COMMIT_CLOSE);
             $user = $this->userModel->getByEmail($commit['author']['email']);
 
             $this->dispatcher->dispatch(
-                $event,
-                new GenericEvent(array(
-                    'task_id' => $task_id,
-                    'task' => $task,
-                    'user_id' => $user['id'],
+                new GenericEvent([
+                    'task_id'        => $task_id,
+                    'task'           => $task,
+                    'user_id'        => $user['id'],
                     'commit_message' => $commit['message'],
-                    'commit_url' => $commit['url'],
-                    'comment' => "[".t('%s committed on Gitea', $commit['author']['name'] ?: $commit['author']['username']).']('.$commit['url'].'): '.trim($commit['message']),
-                ) + $task)
+                    'commit_url'     => $commit['url'],
+                    'comment'        => "[" . t('%s committed on Gitea', $commit['author']['name'] ?: $commit['author']['username']) . '](' . $commit['url'] . '): ' . trim($commit['message']),
+                ] + $task),
+                $event,
             );
         }
 
